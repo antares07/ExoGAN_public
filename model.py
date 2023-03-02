@@ -122,9 +122,11 @@ class DCGAN(object):
     self.grad_complete_loss = tf.gradients(self.complete_loss, self.z)
 
   def train(self, config, X):
-    data = X
-    np.random.shuffle(data)
-    assert (len(data) > 0)
+
+    #Not considered if we use chunks
+    #data = X
+    #np.random.shuffle(data)
+    #assert (len(data) > 0)
 
     d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
       .minimize(self.d_loss, var_list=self.d_vars)
@@ -143,10 +145,7 @@ class DCGAN(object):
     
 
     sample_z = np.random.uniform(-1, 1, size=(self.sample_size, self.z_dim))
-    sample_files = data[0:self.sample_size]
-
-    sample = [get_spectral_matrix(sample_file, size=self.image_size - 10) for sample_file in sample_files]
-    sample_images = np.array(sample).astype(np.float32)
+    
     counter = 1
     start_time = time.time()
 
@@ -168,54 +167,75 @@ class DCGAN(object):
             Initializing a new one.
             ======
             """)
-
+    all_spec = glob(config.training_dir+'/chunck_*.pkgz')
+    num_chunks = 2
     for epoch in xrange(config.epoch):
-      data = X
-      batch_idxs = min(len(data), config.train_size) // self.batch_size
 
-      for idx in xrange(0, batch_idxs):
-        batch_files = data[idx * config.batch_size:(idx + 1) * config.batch_size]
-        batch = [get_spectral_matrix(batch_file, size=self.image_size - 10)
-                 for batch_file in batch_files]
-        batch_images = np.array(batch).astype(np.float32)
+      #Load the data in chunks
+      np.random.shuffle(all_spec)
+      chunk_list = all_spec[:num_chunks]
+      for index, chunk in enumerate(chunk_list):
+        X = []
+        s = load(chunk_list[index])
+        print('Num chunk:', chunk)
+        for j in s.keys():
+          X.append(s[j])
+        X = np.array(X)
+        np.random.shuffle(X)
+      
+        data = X
+        np.random.shuffle(data)
 
-        batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
-          .astype(np.float32)
+        sample_files = data[0:self.sample_size]
 
-        # Update D network
-        _, summary_str = self.sess.run([d_optim, self.d_sum],
-                                       feed_dict={self.images: batch_images, self.z: batch_z, self.is_training: True})
-        self.writer.add_summary(summary_str, counter)
+        sample = [get_spectral_matrix(sample_file, size=self.image_size - 10) for sample_file in sample_files]
+        sample_images = np.array(sample).astype(np.float32)
+        assert (len(data) > 0)
+        batch_idxs = min(len(data), config.train_size) // self.batch_size
 
-        # Update G network
-        _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                       feed_dict={self.z: batch_z, self.is_training: True})
-        self.writer.add_summary(summary_str, counter)
+        for idx in xrange(0, batch_idxs):
+          batch_files = data[idx * config.batch_size:(idx + 1) * config.batch_size]
+          batch = [get_spectral_matrix(batch_file, size=self.image_size - 10)
+                  for batch_file in batch_files]
+          batch_images = np.array(batch).astype(np.float32)
 
-        # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-        _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                       feed_dict={self.z: batch_z, self.is_training: True})
-        self.writer.add_summary(summary_str, counter)
-        with self.sess.as_default():
-          errD_fake = self.d_loss_fake.eval({self.z: batch_z, self.is_training: False})
-          errD_real = self.d_loss_real.eval({self.images: batch_images, self.is_training: False})
-          errG = self.g_loss.eval({self.z: batch_z, self.is_training: False})
+          batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
+            .astype(np.float32)
 
-        counter += 1
-        print("Epoch: [{:2d}] [{:4d}/{:4d}] time: {:4.4f}, d_loss: {:.8f}, g_loss: {:.8f}".format(
-          epoch, idx, batch_idxs, time.time() - start_time, errD_fake + errD_real, errG))
+          # Update D network
+          _, summary_str = self.sess.run([d_optim, self.d_sum],
+                                        feed_dict={self.images: batch_images, self.z: batch_z, self.is_training: True})
+          self.writer.add_summary(summary_str, counter)
 
-#        if np.mod(counter, 1000) == 1:
-#          samples, d_loss, g_loss = self.sess.run(
-#            [self.G, self.d_loss, self.g_loss],
-#            feed_dict={self.z: sample_z, self.images: sample_images, self.is_training: False}
-#          )
-#          save_images(samples, [8, 8],
-#                      './samples/train_{:02d}_{:04d}.pdf'.format(epoch, idx))
-#          print("[Sample] d_loss: {:.8f}, g_loss: {:.8f}".format(d_loss, g_loss))
+          # Update G network
+          _, summary_str = self.sess.run([g_optim, self.g_sum],
+                                        feed_dict={self.z: batch_z, self.is_training: True})
+          self.writer.add_summary(summary_str, counter)
 
-        if np.mod(counter, 1000) == 2:
-          self.save(config.checkpoint_dir, counter)
+          # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
+          _, summary_str = self.sess.run([g_optim, self.g_sum],
+                                        feed_dict={self.z: batch_z, self.is_training: True})
+          self.writer.add_summary(summary_str, counter)
+          with self.sess.as_default():
+            errD_fake = self.d_loss_fake.eval({self.z: batch_z, self.is_training: False})
+            errD_real = self.d_loss_real.eval({self.images: batch_images, self.is_training: False})
+            errG = self.g_loss.eval({self.z: batch_z, self.is_training: False})
+
+          counter += 1
+          print("Epoch: [{:2d}] [{:4d}/{:4d}] time: {:4.4f}, d_loss: {:.8f}, g_loss: {:.8f}".format(
+            epoch, idx, batch_idxs, time.time() - start_time, errD_fake + errD_real, errG))
+
+  #        if np.mod(counter, 1000) == 1:
+  #          samples, d_loss, g_loss = self.sess.run(
+  #            [self.G, self.d_loss, self.g_loss],
+  #            feed_dict={self.z: sample_z, self.images: sample_images, self.is_training: False}
+  #          )
+  #          save_images(samples, [8, 8],
+  #                      './samples/train_{:02d}_{:04d}.pdf'.format(epoch, idx))
+  #          print("[Sample] d_loss: {:.8f}, g_loss: {:.8f}".format(d_loss, g_loss))
+
+          if np.mod(counter, 1000) == 2:
+            self.save(config.checkpoint_dir, counter)
 
   def complete(self, config, X, path="", sigma=0.0):
     """
@@ -297,6 +317,9 @@ class DCGAN(object):
       mask[-8:, :, :] = 0.0
       mask[:, -10:, :] = 0.0
       mask[-10:, -10:, :] = 0.0
+    elif config.maskType == 'jwst':
+      mask = np.genfromtxt('jwst_mask.dat')
+      mask = np.expand_dims(mask, axis=2)
     else:
       assert (False)
 

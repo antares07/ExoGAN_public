@@ -35,7 +35,7 @@ import multiprocessing
 from multiprocessing import Pool
 from model import DCGAN
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
-np.set_printoptions(threshold='nan')
+#np.set_printoptions(threshold='nan')
 
 
 
@@ -50,10 +50,10 @@ if __name__ == '__main__':
     flags.DEFINE_integer("epoch", 1, "Epoch to train [25]")
     flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam [0.0002]")
     flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
-    flags.DEFINE_float("train_size", np.inf, "The size of train images [np.inf]")
+    flags.DEFINE_float("train_size", 1e99, "The size of train images [np.inf]")
     flags.DEFINE_integer("batch_size", 64, "The size of batch images [64]")
     flags.DEFINE_integer("image_size", 33, "The size of image to use")
-    flags.DEFINE_string("training_dir", 'training_set', "Training set directory")
+    flags.DEFINE_string("training_dir", '/data/zingales/data/exogan_training_set', "Training set directory")
     flags.DEFINE_integer("training_init", 0, "Starting chunk of the training set" )
     flags.DEFINE_string("checkpoint_dir", "checkpoint_test", "Directory name to save the checkpoints [checkpoint]")
     flags.DEFINE_string("sample_dir", "samples", "Directory name to save the image samples [samples]")
@@ -68,14 +68,14 @@ if __name__ == '__main__':
     Load the training set
     """
     
-    all_spec = glob(FLAGS.training_dir+'/chunck_*.pkgz')
+    #all_spec = glob(FLAGS.training_dir+'/chunck_*.pkgz')
     X = []
-    for i in range(FLAGS.training_init, len(all_spec)):
-      s = load(all_spec[i])
-      for j in s.keys():
-        X.append(s[j])
-    X = np.array(X)
-    np.random.shuffle(X)
+    #for i in range(FLAGS.training_init, len(all_spec)):
+    #  s = load(all_spec[i])
+    #  for j in s.keys():
+    #    X.append(s[j])
+    #X = np.array(X)
+    #np.random.shuffle(X)
     
     
     tf.reset_default_graph()
